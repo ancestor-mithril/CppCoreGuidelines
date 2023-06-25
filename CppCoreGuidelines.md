@@ -1,6 +1,6 @@
 # <a name="main"></a>C++ Core Guidelines
 
-October 6, 2022
+April 13, 2023
 
 Editors:
 
@@ -241,7 +241,7 @@ All C++ programmers. This includes [programmers who might consider C](#S-cpl).
 
 ## <a name="SS-aims"></a>In.aims: Aims
 
-The purpose of this document is to help developers to adopt modern C++ (currently C++17) and to achieve a more uniform style across code bases.
+The purpose of this document is to help developers to adopt modern C++ (currently C++20 and C++17) and to achieve a more uniform style across code bases.
 
 We do not suffer the delusion that every one of these rules can be effectively applied to every code base. Upgrading old systems is hard. However, we do believe that a program that uses a rule is less error-prone and more maintainable than one that does not. Often, rules also lead to faster/easier initial development.
 As far as we can tell, these rules lead to code that performs as well or better than older, more conventional techniques; they are meant to follow the zero-overhead principle ("what you don't use, you don't pay for" or "when you use an abstraction mechanism appropriately, you get at least as good performance as if you had handcoded using lower-level language constructs").
@@ -644,7 +644,9 @@ Some language constructs express intent better than others.
 
 If two `int`s are meant to be the coordinates of a 2D point, say so:
 
-    draw_line(int, int, int, int);  // obscure
+    draw_line(int, int, int, int);  // obscure: (x1,y1,x2,y2)? (x,y,h,w)? ...?
+                                    // need to look up documentation to know
+
     draw_line(Point, Point);        // clearer
 
 ##### Enforcement
@@ -2385,7 +2387,7 @@ Other function rules:
 * [F.51: Where there is a choice, prefer default arguments over overloading](#Rf-default-args)
 * [F.52: Prefer capturing by reference in lambdas that will be used locally, including passed to algorithms](#Rf-reference-capture)
 * [F.53: Avoid capturing by reference in lambdas that will be used non-locally, including returned, stored on the heap, or passed to another thread](#Rf-value-capture)
-* [F.54: If you capture `this`, capture all variables explicitly (no default capture)](#Rf-this-capture)
+* [F.54: When writing a lambda that captures `this` or any class data member, don't use `[=]` default capture](#Rf-this-capture)
 * [F.55: Don't use `va_arg` arguments](#F-varargs)
 * [F.56: Avoid unnecessary condition nesting](#F-nesting)
 
@@ -2850,7 +2852,7 @@ Suppression of unused parameter warnings.
 
 ##### Note
 
-Allowing parameters to be unnamed was introduced in the early 1980 to address this problem.
+Allowing parameters to be unnamed was introduced in the early 1980s to address this problem.
 
 If parameters are conditionally unused, declare them with the `[[maybe_unused]]` attribute.
 For example:
@@ -3150,7 +3152,7 @@ Usually you forward the entire parameter (or parameter pack, using `...`) exactl
 Sometimes you may forward a composite parameter piecewise, each subobject once on every static control flow path:
 
     template<class PairLike>
-    inline auto test(PairLike&&... pairlike)
+    inline auto test(PairLike&& pairlike)
     {
         // ...
         f1(some, args, and, forward<PairLike>(pairlike).first);           // forward .first
@@ -4118,7 +4120,7 @@ If the `this` pointer must be captured, consider using `[*this]` capture, which 
 * (Simple) Warn when capture-list contains a reference to a locally declared variable
 * (Complex) Flag when capture-list contains a reference to a locally declared variable and the lambda is passed to a non-`const` and non-local context
 
-### <a name="Rf-this-capture"></a>F.54: If you capture `this`, capture all variables explicitly (no default capture)
+### <a name="Rf-this-capture"></a>F.54: When writing a lambda that captures `this` or any class data member, don't use `[=]` default capture
 
 ##### Reason
 
@@ -4154,11 +4156,11 @@ It's confusing. Writing `[=]` in a member function appears to capture by value, 
 
 ##### Note
 
-This is under active discussion in standardization, and might be addressed in a future version of the standard by adding a new capture mode or possibly adjusting the meaning of `[=]`. For now, just be explicit.
+If you intend to capture a copy of all class data members, consider C++17 `[*this]`.
 
 ##### Enforcement
 
-* Flag any lambda capture-list that specifies a capture-default (e.g., `=` or `&`) and also captures `this` (whether explicitly such as `[&, this]` or via default capture such as `[=]` and a use of `this` in the body)
+* Flag any lambda capture-list that specifies a capture-default of `[=]` and also captures `this` (whether explicitly or via the default capture and a use of `this` in the body)
 
 ### <a name="F-varargs"></a>F.55: Don't use `va_arg` arguments
 
@@ -4938,6 +4940,7 @@ defined as defaulted.
 
     class AbstractBase {
     public:
+        virtual void foo() = 0;  // at least one abstract method to make the class abstract
         virtual ~AbstractBase() = default;
         // ...
     };
@@ -4945,15 +4948,15 @@ defined as defaulted.
 To prevent slicing as per [C.67](#Rc-copy-virtual),
 make the copy and move operations protected or `=delete`d, and add a `clone`:
 
-    class ClonableBase {
+    class CloneableBase {
     public:
-        virtual unique_ptr<ClonableBase> clone() const;
-        virtual ~ClonableBase() = default;
+        virtual unique_ptr<CloneableBase> clone() const;
+        virtual ~CloneableBase() = default;
         CloneableBase() = default;
-        ClonableBase(const ClonableBase&) = delete;
-        ClonableBase& operator=(const ClonableBase&) = delete;
-        ClonableBase(ClonableBase&&) = delete;
-        ClonableBase& operator=(ClonableBase&&) = delete;
+        CloneableBase(const CloneableBase&) = delete;
+        CloneableBase& operator=(const CloneableBase&) = delete;
+        CloneableBase(CloneableBase&&) = delete;
+        CloneableBase& operator=(CloneableBase&&) = delete;
         // ... other constructors and functions ...
     };
 
@@ -5007,7 +5010,7 @@ Users will be surprised if copy/move construction and copy/move assignment do lo
         shared_ptr<Impl> p;
     public:
         Silly(const Silly& a) : p(make_shared<Impl>()) { *p = *a.p; }   // deep copy
-        Silly& operator=(const Silly& a) { p = a.p; }   // shallow copy
+        Silly& operator=(const Silly& a) { p = a.p; return *this; }   // shallow copy
         // ...
     };
 
@@ -5603,7 +5606,7 @@ A default constructor often simplifies the task of defining a suitable [moved-fr
     };
 
     vector<Date> vd1(1000);   // default Date needed here
-    vector<Date> vd2(1000, Date{Month::October, 7, 1885});   // alternative
+    vector<Date> vd2(1000, Date{7, Month::October, 1885});   // alternative
 
 The default constructor is only auto-generated if there is no user-declared constructor, hence it's impossible to initialize the vector `vd1` in the example above.
 The absence of a default value can cause surprises for users and complicate its use, so if one can be reasonably defined, it should be.
@@ -6384,7 +6387,7 @@ If `x = x` changes the value of `x`, people will be surprised and bad errors can
         string s;
         int i;
     public:
-        Foo& operator=(Foo&& a);
+        Foo& operator=(Foo&& a) noexcept;
         // ...
     };
 
@@ -6433,8 +6436,13 @@ A non-throwing move will be used more efficiently by standard-library and langua
     template<typename T>
     class Vector {
     public:
-        Vector(Vector&& a) noexcept :elem{a.elem}, sz{a.sz} { a.sz = 0; a.elem = nullptr; }
-        Vector& operator=(Vector&& a) noexcept { elem = a.elem; sz = a.sz; a.sz = 0; a.elem = nullptr; }
+        Vector(Vector&& a) noexcept :elem{a.elem}, sz{a.sz} { a.elem = nullptr; a.sz = 0; }
+        Vector& operator=(Vector&& a) noexcept {
+            delete elem;
+            elem = a.elem; a.elem = nullptr;
+            sz   = a.sz;   a.sz   = 0;
+            return *this;
+        }
         // ...
     private:
         T* elem;
@@ -9067,9 +9075,13 @@ Instead use an `enum`:
 
 We used an `enum class` to avoid name clashes.
 
+##### Note
+
+Also consider `constexpr` and `const inline` variables.
+
 ##### Enforcement
 
-Flag macros that define integer values.
+Flag macros that define integer values. Use `enum` or `const inline` or another non-macro alternative instead.
 
 
 ### <a name="Renum-set"></a>Enum.2: Use enumerations to represent sets of related named constants
@@ -9149,7 +9161,7 @@ Convenience of use and avoidance of errors.
 
 ##### Example
 
-    enum Day { mon, tue, wed, thu, fri, sat, sun };
+    enum class Day { mon, tue, wed, thu, fri, sat, sun };
 
     Day& operator++(Day& d)
     {
@@ -12724,7 +12736,7 @@ There are many approaches to dealing with this potential problem:
 
 There are two potential problems with testing for `nullptr`:
 
-* it is not always obvious what to do what to do if we find `nullptr`
+* it is not always obvious what to do if we find `nullptr`
 * the test can be redundant and/or relatively expensive
 * it is not obvious if the test is to protect against a violation or part of the required logic.
 
@@ -13423,8 +13435,8 @@ Unsigned types support bit manipulation without surprises from sign bits.
 
 ##### Note
 
-Unsigned types can also be useful for modulo arithmetic.
-However, if you want modulo arithmetic add
+Unsigned types can also be useful for modular arithmetic.
+However, if you want modular arithmetic add
 comments as necessary noting the reliance on wraparound behavior, as such code
 can be surprising for many programmers.
 
@@ -13438,7 +13450,7 @@ can be surprising for many programmers.
 ##### Reason
 
 Because most arithmetic is assumed to be signed;
-`x - y` yields a negative number when `y > x` except in the rare cases where you really want modulo arithmetic.
+`x - y` yields a negative number when `y > x` except in the rare cases where you really want modular arithmetic.
 
 ##### Example
 
@@ -13468,7 +13480,7 @@ but if you had seen `us - (s + 2)` or `s += 2; ...; us - s`, would you reliably 
 
 ##### Exception
 
-Use unsigned types if you really want modulo arithmetic - add
+Use unsigned types if you really want modular arithmetic - add
 comments as necessary noting the reliance on overflow behavior, as such code
 is going to be surprising for many programmers.
 
@@ -13527,7 +13539,7 @@ Incrementing a value beyond a maximum value can lead to memory corruption and un
 
 ##### Exception
 
-Use unsigned types if you really want modulo arithmetic.
+Use unsigned types if you really want modular arithmetic.
 
 **Alternative**: For critical applications that can afford some overhead, use a range-checked integer and/or floating-point type.
 
@@ -13552,7 +13564,7 @@ Decrementing a value beyond a minimum value can lead to memory corruption and un
 
 ##### Exception
 
-Use unsigned types if you really want modulo arithmetic.
+Use unsigned types if you really want modular arithmetic.
 
 ##### Enforcement
 
@@ -13602,7 +13614,7 @@ This also applies to `%`.
 
 ##### Reason
 
-Choosing `unsigned` implies many changes to the usual behavior of integers, including modulo arithmetic,
+Choosing `unsigned` implies many changes to the usual behavior of integers, including modular arithmetic,
 can suppress warnings related to overflow,
 and opens the door for errors related to signed/unsigned mixes.
 Using `unsigned` doesn't actually eliminate the possibility of negative values.
@@ -13624,7 +13636,7 @@ Consider:
     auto a = area(height, 2);   // if the input is -2 a becomes 4294967292
 
 Remember that `-1` when assigned to an `unsigned int` becomes the largest `unsigned int`.
-Also, since unsigned arithmetic is modulo arithmetic the multiplication didn't overflow, it wrapped around.
+Also, since unsigned arithmetic is modular arithmetic the multiplication didn't overflow, it wrapped around.
 
 ##### Example
 
@@ -17512,7 +17524,7 @@ and should be used only as building blocks for meaningful concepts, rather than 
 
     template<typename T>
     // bad; insufficient
-    concept Addable = requires(T a, T b) { a+b; };
+    concept Addable = requires(T a, T b) { a + b; };
 
     template<Addable N>
     auto algo(const N& a, const N& b) // use two numbers
@@ -17540,7 +17552,7 @@ The ability to specify meaningful semantics is a defining characteristic of a tr
 
     template<typename T>
     // The operators +, -, *, and / for a number are assumed to follow the usual mathematical rules
-    concept Number = requires(T a, T b) { a+b; a-b; a*b; a/b; };
+    concept Number = requires(T a, T b) { a + b; a - b; a * b; a / b; };
 
     template<Number N>
     auto algo(const N& a, const N& b)
@@ -17581,7 +17593,7 @@ This is a specific variant of the general rule that [a concept must make semanti
 
 ##### Example, bad
 
-    template<typename T> concept Subtractable = requires(T a, T b) { a-b; };
+    template<typename T> concept Subtractable = requires(T a, T b) { a - b; };
 
 This makes no semantic sense.
 You need at least `+` to make `-` meaningful and useful.
@@ -17671,10 +17683,10 @@ Specifying semantics is a powerful design tool.
         // The operators +, -, *, and / for a number are assumed to follow the usual mathematical rules
         // axiom(T a, T b) { a + b == b + a; a - a == 0; a * (b + c) == a * b + a * c; /*...*/ }
         concept Number = requires(T a, T b) {
-            {a + b} -> convertible_to<T>;
-            {a - b} -> convertible_to<T>;
-            {a * b} -> convertible_to<T>;
-            {a / b} -> convertible_to<T>;
+            { a + b } -> convertible_to<T>;
+            { a - b } -> convertible_to<T>;
+            { a * b } -> convertible_to<T>;
+            { a / b } -> convertible_to<T>;
         };
 
 ##### Note
@@ -18959,7 +18971,7 @@ Write your own "advanced TMP support" only if you really have to.
 
 ## <a name="SS-temp-other"></a>Other template rules
 
-### <a name="Rt-name"></a>T.140: If an operation can be reused, give it a name](#Rt-name
+### <a name="Rt-name"></a>T.140: If an operation can be reused, give it a name
 
 See [F.10](#Rf-name)
 
@@ -19406,10 +19418,6 @@ and M functions each containing a `using namespace X`with N lines of code in tot
 
 [Don't write `using namespace` at global scope in a header file](#Rs-using-directive).
 
-##### Enforcement
-
-Flag multiple `using namespace` directives for different namespaces in a single source file.
-
 ### <a name="Rs-using-directive"></a>SF.7: Don't write `using namespace` at global scope in a header file
 
 ##### Reason
@@ -19757,7 +19765,21 @@ Additions to `std` might clash with future versions of the standard.
 
 ##### Example
 
-    ???
+    namespace std { // BAD: violates standard
+
+    class My_vector {
+        //     . . .
+    };
+
+    }
+
+    namespace Foo { // GOOD: user namespace is allowed
+
+    class My_vector {
+        //     . . .
+    };
+
+    }
 
 ##### Enforcement
 
@@ -20899,7 +20921,7 @@ Reference sections:
 
 ## <a name="SS-rules"></a>RF.rules: Coding rules
 
-* [AUTOSAR Guidelines for the use of the C++14 language in critical and safety-related systems v17.10](https://www.autosar.org/fileadmin/user_upload/standards/adaptive/17-10/AUTOSAR_RS_CPP14Guidelines.pdf)
+* [AUTOSAR Guidelines for the use of the C++14 language in critical and safety-related systems v17.10](https://web.archive.org/web/20220629085753/https://www.autosar.org/fileadmin/user_upload/standards/adaptive/17-03/AUTOSAR_RS_CPP14Guidelines.pdf)
 * [Boost Library Requirements and Guidelines](http://www.boost.org/development/requirements.html).
   ???.
 * [Bloomberg: BDE C++ Coding](https://github.com/bloomberg/bde/wiki/CodingStandards.pdf).
